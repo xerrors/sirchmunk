@@ -715,15 +715,8 @@ class AgenticSearch(BaseSearch):
         include: Optional[List[str]] = None,
         exclude: Optional[List[str]] = None,
         return_context: bool = False,
-        return_cluster: bool = False,
         spec_stale_hours: float = 72.0,
-    ) -> Union[
-        str,
-        Tuple[str, SearchContext],
-        KnowledgeCluster,
-        Tuple[KnowledgeCluster, SearchContext],
-        List[Dict[str, Any]],
-    ]:
+    ) -> Union[str, SearchContext, List[Dict[str, Any]]]:
         """Perform intelligent search with multi-mode support.
 
         Modes:
@@ -800,20 +793,16 @@ class AgenticSearch(BaseSearch):
                 Used in both FILENAME_ONLY and DEEP modes.
             exclude: File glob patterns to exclude (e.g. ``["*.log"]``).
                 Used in both FILENAME_ONLY and DEEP modes.
-            return_context: If True, return ``(answer, SearchContext)`` tuple.
-            return_cluster: If True, return the full KnowledgeCluster.
-                When ``reuse_knowledge=True`` and a cached cluster matches,
-                the **original** cluster is returned — preserving all
-                evidences, confidence, and metadata from the prior search.
+            return_context: If True, return a ``SearchContext`` object
+                that carries ``answer``, ``cluster`` (KnowledgeCluster),
+                and full pipeline telemetry (LLM usage, files read, etc.).
             spec_stale_hours: Hours before spec cache is stale (default: 72).
 
         Returns:
             - ``str``: Answer summary (default).
-            - ``(str, SearchContext)``: If *return_context* only.
-            - ``KnowledgeCluster``: If *return_cluster* only.
-            - ``(KnowledgeCluster, SearchContext)``: If **both** flags set.
-            - ``List[Dict]``: File matches in FILENAME_ONLY mode
-              (``return_context`` / ``return_cluster`` do not apply).
+            - ``SearchContext``: If *return_context* — contains ``answer``,
+              ``cluster``, and telemetry in a single object.
+            - ``List[Dict]``: File matches in FILENAME_ONLY mode.
         """
         paths = self._resolve_paths(paths)
 
@@ -826,7 +815,7 @@ class AgenticSearch(BaseSearch):
             if not results:
                 msg = f"No files found matching query: '{query}'"
                 await self._logger.warning(msg)
-                return None if return_cluster else msg
+                return msg
             await self._logger.success(f"Retrieved {len(results)} matching files")
             return results
 
@@ -846,22 +835,14 @@ class AgenticSearch(BaseSearch):
                 spec_stale_hours=spec_stale_hours,
             )
 
-        # ---- Persist cluster (FAST clusters are now saved too) ----
-        if cluster and not return_cluster:
-            # Fire-and-forget persistence when caller only wants the answer.
-            # When return_cluster is True the caller controls the lifecycle.
-            pass  # persistence already handled inside _search_deep / _search_fast
-
         # ---- Unified return wrapping ----
-        if return_cluster and return_context:
-            prefix = "FS" if mode == "FAST" else "DS"
-            final_cluster = cluster or self._make_answer_cluster(query, answer, prefix)
-            return final_cluster, context
-        if return_cluster:
-            prefix = "FS" if mode == "FAST" else "DS"
-            return cluster or self._make_answer_cluster(query, answer, prefix)
         if return_context:
-            return answer, context
+            prefix = "FS" if mode == "FAST" else "DS"
+            context.answer = answer
+            context.cluster = cluster or self._make_answer_cluster(
+                query, answer, prefix,
+            )
+            return context
         return answer
 
     # ------------------------------------------------------------------
