@@ -90,6 +90,7 @@ export default function HomePage() {
   const [showModeDropdown, setShowModeDropdown] = useState(false);
   const [enableSuggestions, setEnableSuggestions] = useState(true);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -158,12 +159,25 @@ export default function HomePage() {
       .catch(() => setTkinterAvailable(false));
   }, []);
 
-  // Auto-scroll to bottom when new messages arrive
+  // Auto-scroll to bottom when new messages or log output arrives.
+  // Run after layout (rAF) so we scroll to the actual bottom; only scroll when
+  // user is already near bottom or when loading, to avoid pulling view to blank.
   useEffect(() => {
-    if (chatEndRef.current) {
-      chatEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [chatState.messages]);
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    const { scrollTop, scrollHeight, clientHeight } = el;
+    const nearBottom = scrollHeight - scrollTop - clientHeight < 200;
+    if (!nearBottom && !chatState.isLoading) return;
+
+    const id = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (messagesContainerRef.current) {
+          messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+        }
+      });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [chatState.messages, chatState.isLoading]);
 
   const handleSend = async () => {
     if (!inputMessage.trim() || chatState.isLoading) return;
@@ -941,7 +955,10 @@ export default function HomePage() {
           </div>
 
           {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+          <div
+            ref={messagesContainerRef}
+            className="flex-1 overflow-y-auto px-6 py-6 space-y-6"
+          >
             {chatState.messages.map((msg, idx) => (
               <div
                 key={idx}
