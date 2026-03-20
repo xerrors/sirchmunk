@@ -301,7 +301,7 @@ def _run_base_init(work_path: Path) -> int:
 
         model_cache_dir = os.getenv("EMBEDDING_CACHE_DIR", str(work_path / ".cache" / "models"))
         # Read embedding model id from environment or use default
-        embedding_model_id = os.getenv("EMBEDDING_MODEL_ID", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
+        embedding_model_id = os.getenv("EMBEDDING_MODEL_ID", EmbeddingUtil.DEFAULT_MODEL_ID)
         model_dir = EmbeddingUtil.preload_model(
             cache_dir=model_cache_dir,
             model_id=embedding_model_id,
